@@ -12,6 +12,7 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentFacingMode = useRef(facingMode);
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -43,8 +44,8 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       
       console.log('Permission granted, starting camera...');
       
-      // Now start the actual camera
-      startCamera();
+      // Trigger camera start by setting a flag
+      window.dispatchEvent(new CustomEvent('camera-permission-granted'));
     } catch (err) {
       console.error('Permission request failed:', err);
       if (err instanceof Error) {
@@ -57,7 +58,7 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
     }
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const initializeCamera = useCallback(async () => {
     try {
       setError('');
       setIsLoading(true);
@@ -68,12 +69,12 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
         clearTimeout(timeoutRef.current);
       }
 
-      // Set timeout for camera loading
+      // Set timeout for camera loading - reduced to 5 seconds
       timeoutRef.current = setTimeout(() => {
         console.log('Camera loading timeout');
         setIsLoading(false);
-        setError('Camera is taking too long to load. Please try again or check your camera settings.');
-      }, 8000);
+        setError('Camera is taking too long to load. Please try refreshing the page or check your camera.');
+      }, 5000);
       
       // Stop existing stream
       if (stream) {
@@ -86,24 +87,17 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
         throw new Error('Camera not supported by this browser');
       }
 
-      console.log('Starting camera with facing mode:', facingMode);
+      console.log('Starting camera with facing mode:', currentFacingMode.current);
       
-      // Use simpler constraints for better compatibility
-      let constraints: MediaStreamConstraints = {
+      // Simplified constraints for faster loading
+      const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 480 },
+          height: { ideal: 360 },
+          facingMode: currentFacingMode.current === 'environment' ? 'environment' : 'user'
         },
         audio: false
       };
-
-      // Only add facingMode for mobile devices
-      if (facingMode === 'environment' && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-        constraints.video = {
-          ...constraints.video as MediaTrackConstraints,
-          facingMode: { ideal: 'environment' }
-        };
-      }
 
       console.log('Requesting camera with constraints:', constraints);
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -137,21 +131,7 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
         } else if (err.name === 'NotReadableError') {
           setError('Camera is already in use by another application. Please close other camera apps and try again.');
         } else if (err.name === 'OverconstrainedError') {
-          // Retry with very basic constraints
-          console.log('Retrying with basic constraints...');
-          try {
-            const basicStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false
-            });
-            setStream(basicStream);
-            setIsLoading(false);
-            setIsReady(true);
-            setError('');
-          } catch {
-            setError('Camera constraints not supported by your device.');
-          }
-          return;
+          setError('Camera settings not supported. Please try switching cameras.');
         } else if (err.name === 'NotSupportedError') {
           setError('Camera not supported by this browser.');
         } else {
@@ -161,11 +141,17 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
         setError('Unable to access camera. Please check your permissions and try again.');
       }
     }
-  }, [facingMode, stream]);
+  }, [stream]);
 
+  // Update facing mode reference when it changes
+  useEffect(() => {
+    currentFacingMode.current = facingMode;
+  }, [facingMode]);
+
+  // Main effect for enabling/disabling camera
   useEffect(() => {
     if (enabled) {
-      startCamera();
+      initializeCamera();
     } else {
       stopCamera();
     }
@@ -176,14 +162,36 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [enabled, startCamera, stopCamera]);
+  }, [enabled]); // Only depend on enabled
+
+  // Handle facing mode changes
+  useEffect(() => {
+    if (enabled && stream) {
+      console.log('Facing mode changed, reinitializing camera');
+      initializeCamera();
+    }
+  }, [facingMode]); // Only depend on facingMode
+
+  // Listen for permission granted event
+  useEffect(() => {
+    const handlePermissionGranted = () => {
+      if (enabled) {
+        initializeCamera();
+      }
+    };
+
+    window.addEventListener('camera-permission-granted', handlePermissionGranted);
+    return () => {
+      window.removeEventListener('camera-permission-granted', handlePermissionGranted);
+    };
+  }, [enabled, initializeCamera]);
 
   return {
     stream,
     error,
     isLoading,
     isReady,
-    startCamera,
+    startCamera: initializeCamera,
     stopCamera,
     requestPermission
   };
