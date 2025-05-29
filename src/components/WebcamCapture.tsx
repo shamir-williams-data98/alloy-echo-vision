@@ -23,6 +23,13 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     facingMode
   });
 
+  // Start camera when enabled changes
+  useEffect(() => {
+    if (enabled) {
+      startCamera();
+    }
+  }, [enabled, startCamera]);
+
   useImperativeHandle(ref, () => ({
     captureImage: () => {
       if (!videoRef.current || !canvasRef.current || !isReady || !videoReady) {
@@ -53,8 +60,8 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
       video.srcObject = stream;
       setVideoReady(false);
       
-      const handleCanPlayThrough = () => {
-        console.log('Video can play through, starting playback');
+      const handleLoadedData = () => {
+        console.log('Video loaded, starting playback');
         video.play()
           .then(() => {
             console.log('Video playing successfully');
@@ -65,25 +72,10 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
           });
       };
 
-      const handlePlaying = () => {
-        console.log('Video is now playing');
-        setVideoReady(true);
-      };
-
-      const handleError = (err: any) => {
-        console.error('Video error:', err);
-        setVideoReady(false);
-      };
-
-      // Use canplaythrough for better reliability
-      video.addEventListener('canplaythrough', handleCanPlayThrough);
-      video.addEventListener('playing', handlePlaying);
-      video.addEventListener('error', handleError);
+      video.addEventListener('loadeddata', handleLoadedData);
       
       return () => {
-        video.removeEventListener('canplaythrough', handleCanPlayThrough);
-        video.removeEventListener('playing', handlePlaying);
-        video.removeEventListener('error', handleError);
+        video.removeEventListener('loadeddata', handleLoadedData);
         setVideoReady(false);
       };
     }

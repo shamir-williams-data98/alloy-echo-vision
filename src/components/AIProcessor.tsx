@@ -53,13 +53,33 @@ class AIProcessor {
   private async processWithFiles(text: string, files: any[]): Promise<string> {
     const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
     
-    let fileContext = "You have access to the following uploaded files:\n";
-    files.forEach(file => {
-      fileContext += `- ${file.file.name} (${file.type.toUpperCase()})\n`;
+    let fileContext = "You have access to the following uploaded files. Analyze their content and provide detailed insights:\n\n";
+    
+    files.forEach((file, index) => {
+      fileContext += `File ${index + 1}: ${file.file.name} (${file.type.toUpperCase()})\n`;
       if (file.content) {
-        fileContext += `  Content preview: ${file.content}\n`;
+        fileContext += `Content: ${file.content}\n`;
       }
+      if (file.type === 'image') {
+        fileContext += `This is an image file that you can analyze if the user asks about visual content.\n`;
+      }
+      if (file.type === 'pdf') {
+        fileContext += `This is a PDF document. Extract and analyze its text content to answer questions.\n`;
+      }
+      fileContext += "\n";
     });
+    
+    const systemPrompt = `You are NEXUS AI by Sham, an advanced AI assistant. You excel at analyzing uploaded files and providing comprehensive insights. When users upload files:
+
+1. For images: Describe what you see, analyze visual elements, identify objects, text, people, etc.
+2. For PDFs: Extract key information, summarize content, answer questions about the document
+3. Always be specific and detailed in your analysis
+4. Reference the file by name when discussing it
+5. If asked about specific details, search through the file content thoroughly
+
+${fileContext}
+
+User question: ${text}`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -69,7 +89,7 @@ class AIProcessor {
       body: JSON.stringify({
         contents: [{
           parts: [{
-            text: `You are NEXUS AI by Sham, an advanced AI assistant. ${fileContext}\nUser message: ${text}`
+            text: systemPrompt
           }]
         }],
         generationConfig: {
@@ -86,7 +106,7 @@ class AIProcessor {
     }
 
     const data = await response.json();
-    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't process the files.";
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't analyze the uploaded files properly.";
     
     this.speakText(aiResponse);
     return aiResponse;
@@ -141,7 +161,6 @@ class AIProcessor {
     
     let base64Data;
     if (imageData.startsWith('blob:')) {
-      // Handle uploaded file blob URL
       const response = await fetch(imageData);
       const blob = await response.blob();
       const reader = new FileReader();
@@ -153,20 +172,19 @@ class AIProcessor {
         reader.readAsDataURL(blob);
       });
     } else {
-      // Handle camera base64 data
       base64Data = imageData.split(',')[1];
     }
     
-    let contextText = `You are NEXUS AI by Sham, an advanced AI assistant with vision capabilities. You can see through the user's camera or analyze uploaded images.`;
+    let contextText = `You are NEXUS AI by Sham, an advanced AI assistant with vision capabilities. Analyze the image in detail and provide comprehensive insights.`;
     
     if (uploadedFiles && uploadedFiles.length > 0) {
-      contextText += " The user has also uploaded files: ";
+      contextText += " Additional context from uploaded files: ";
       uploadedFiles.forEach(file => {
         contextText += `${file.file.name} (${file.type}), `;
       });
     }
     
-    contextText += ` Analyze the image and respond to: ${text}`;
+    contextText += ` User request: ${text}`;
     
     const response = await fetch(url, {
       method: 'POST',

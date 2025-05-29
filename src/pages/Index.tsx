@@ -6,7 +6,6 @@ import { Mic, MicOff, Camera, CameraOff, Volume2, VolumeX } from 'lucide-react';
 import WebcamCapture from '@/components/WebcamCapture';
 import VoiceControls from '@/components/VoiceControls';
 import ChatDisplay from '@/components/ChatDisplay';
-import FileUpload from '@/components/FileUpload';
 import AIProcessor from '@/components/AIProcessor';
 
 interface Message {
@@ -128,7 +127,7 @@ const Index = () => {
             <Card className="h-full bg-gray-900/50 border-gray-700 backdrop-blur-sm overflow-hidden">
               <div className="p-3 md:p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                  <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Vision & Files</h3>
+                  <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Vision</h3>
                   <Button
                     variant="outline"
                     size="sm"
@@ -139,22 +138,12 @@ const Index = () => {
                   </Button>
                 </div>
                 
-                <div className="flex-1 min-h-0 space-y-3">
-                  <div className="flex-1 min-h-0">
-                    <WebcamCapture 
-                      ref={webcamRef}
-                      enabled={cameraEnabled}
-                      onImageCapture={setCurrentImage}
-                    />
-                  </div>
-                  
-                  <div className="flex-shrink-0">
-                    <FileUpload
-                      onFileUploaded={handleFileUploaded}
-                      uploadedFiles={uploadedFiles}
-                      onRemoveFile={handleRemoveFile}
-                    />
-                  </div>
+                <div className="flex-1 min-h-0">
+                  <WebcamCapture 
+                    ref={webcamRef}
+                    enabled={cameraEnabled}
+                    onImageCapture={setCurrentImage}
+                  />
                 </div>
               </div>
             </Card>
@@ -178,6 +167,9 @@ const Index = () => {
                   onUserMessage={handleUserMessage}
                   onListeningChange={setIsListening}
                   onSpeakingChange={setIsSpeaking}
+                  uploadedFiles={uploadedFiles}
+                  onFileUploaded={handleFileUploaded}
+                  onRemoveFile={handleRemoveFile}
                 />
               </div>
             </Card>
