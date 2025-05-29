@@ -12,7 +12,6 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentFacingMode = useRef(facingMode);
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -33,24 +32,21 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       setError('');
       console.log('Requesting camera permission...');
       
-      // Request basic camera access to trigger permission dialog
       const tempStream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: false 
       });
       
-      // Immediately stop the temp stream
       tempStream.getTracks().forEach(track => track.stop());
+      console.log('Permission granted');
       
-      console.log('Permission granted, starting camera...');
-      
-      // Trigger camera start by setting a flag
-      window.dispatchEvent(new CustomEvent('camera-permission-granted'));
+      // Immediately start camera after permission
+      initializeCamera();
     } catch (err) {
       console.error('Permission request failed:', err);
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
-          setError('Camera permission was denied. Please refresh the page and try again.');
+          setError('Camera permission was denied. Please click "Grant Permission" and allow camera access.');
         } else {
           setError('Failed to request camera permission. Please try again.');
         }
@@ -59,52 +55,50 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
   }, []);
 
   const initializeCamera = useCallback(async () => {
+    if (!enabled) return;
+    
     try {
       setError('');
       setIsLoading(true);
       setIsReady(false);
       
-      // Clear any existing timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
 
-      // Set timeout for camera loading - reduced to 5 seconds
+      // Shorter timeout and immediate failure
       timeoutRef.current = setTimeout(() => {
-        console.log('Camera loading timeout');
+        console.log('Camera loading timeout - trying simplified constraints');
         setIsLoading(false);
-        setError('Camera is taking too long to load. Please try refreshing the page or check your camera.');
-      }, 5000);
+        setError('Camera is taking too long to load. Click "Grant Permission" to try again.');
+      }, 3000);
       
-      // Stop existing stream
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
         setStream(null);
       }
 
-      // Check browser support
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera not supported by this browser');
       }
 
-      console.log('Starting camera with facing mode:', currentFacingMode.current);
+      console.log('Starting camera with facing mode:', facingMode);
       
-      // Simplified constraints for faster loading
+      // Very simple constraints for faster loading
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: 480 },
-          height: { ideal: 360 },
-          facingMode: currentFacingMode.current === 'environment' ? 'environment' : 'user'
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+          facingMode: facingMode
         },
         audio: false
       };
 
-      console.log('Requesting camera with constraints:', constraints);
+      console.log('Requesting camera with simplified constraints');
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       
       console.log('Camera stream obtained successfully');
       
-      // Clear timeout on success
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -113,7 +107,6 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       setIsLoading(false);
       setIsReady(true);
       
-      return mediaStream;
     } catch (err) {
       console.error('Camera error:', err);
       setIsLoading(false);
@@ -125,30 +118,19 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
-          setError('Camera access denied. Please grant camera permission to continue.');
+          setError('Camera access denied. Click "Grant Permission" to allow camera access.');
         } else if (err.name === 'NotFoundError') {
           setError('No camera found. Please connect a camera device.');
         } else if (err.name === 'NotReadableError') {
-          setError('Camera is already in use by another application. Please close other camera apps and try again.');
-        } else if (err.name === 'OverconstrainedError') {
-          setError('Camera settings not supported. Please try switching cameras.');
-        } else if (err.name === 'NotSupportedError') {
-          setError('Camera not supported by this browser.');
+          setError('Camera is being used by another application. Please close other camera apps.');
         } else {
-          setError(err.message);
+          setError('Unable to access camera. Click "Grant Permission" to try again.');
         }
-      } else {
-        setError('Unable to access camera. Please check your permissions and try again.');
       }
     }
-  }, [stream]);
+  }, [enabled, facingMode, stream]);
 
-  // Update facing mode reference when it changes
-  useEffect(() => {
-    currentFacingMode.current = facingMode;
-  }, [facingMode]);
-
-  // Main effect for enabling/disabling camera
+  // Only initialize when enabled changes
   useEffect(() => {
     if (enabled) {
       initializeCamera();
@@ -158,33 +140,16 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
 
     return () => {
       stopCamera();
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
     };
-  }, [enabled]); // Only depend on enabled
+  }, [enabled]);
 
-  // Handle facing mode changes
+  // Handle facing mode changes separately
   useEffect(() => {
     if (enabled && stream) {
       console.log('Facing mode changed, reinitializing camera');
       initializeCamera();
     }
-  }, [facingMode]); // Only depend on facingMode
-
-  // Listen for permission granted event
-  useEffect(() => {
-    const handlePermissionGranted = () => {
-      if (enabled) {
-        initializeCamera();
-      }
-    };
-
-    window.addEventListener('camera-permission-granted', handlePermissionGranted);
-    return () => {
-      window.removeEventListener('camera-permission-granted', handlePermissionGranted);
-    };
-  }, [enabled, initializeCamera]);
+  }, [facingMode]);
 
   return {
     stream,

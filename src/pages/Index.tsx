@@ -6,6 +6,7 @@ import { Mic, MicOff, Camera, CameraOff, Volume2, VolumeX } from 'lucide-react';
 import WebcamCapture from '@/components/WebcamCapture';
 import VoiceControls from '@/components/VoiceControls';
 import ChatDisplay from '@/components/ChatDisplay';
+import FileUpload from '@/components/FileUpload';
 import AIProcessor from '@/components/AIProcessor';
 
 interface Message {
@@ -14,13 +15,22 @@ interface Message {
   type: 'user' | 'assistant';
   timestamp: number;
   hasImage?: boolean;
+  hasFiles?: boolean;
+}
+
+interface UploadedFile {
+  id: string;
+  file: File;
+  type: 'image' | 'pdf' | 'other';
+  url?: string;
+  content?: string;
 }
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Hello! I\'m NEXUS AI by Sham, your advanced assistant. I can see through your camera and respond with voice. Ask me anything!',
+      text: 'Hello! I\'m NEXUS AI by Sham, your advanced assistant. I can see through your camera, analyze uploaded files (images & PDFs), and respond with voice. Ask me anything!',
       type: 'assistant',
       timestamp: Date.now()
     }
@@ -29,6 +39,7 @@ const Index = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const webcamRef = useRef<any>(null);
 
   useEffect(() => {
@@ -44,25 +55,33 @@ const Index = () => {
     };
   }, []);
 
-  const addMessage = useCallback((text: string, type: 'user' | 'assistant', hasImage?: boolean) => {
+  const addMessage = useCallback((text: string, type: 'user' | 'assistant', hasImage?: boolean, hasFiles?: boolean) => {
     const newMessage: Message = {
       id: Date.now().toString(),
       text,
       type,
       timestamp: Date.now(),
-      hasImage
+      hasImage,
+      hasFiles
     };
     setMessages(prev => [...prev, newMessage]);
   }, []);
 
+  const handleFileUploaded = useCallback((file: UploadedFile) => {
+    setUploadedFiles(prev => [...prev, file]);
+  }, []);
+
+  const handleRemoveFile = useCallback((id: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  }, []);
+
   const handleUserMessage = useCallback(async (userText: string) => {
     console.log('User message received:', userText);
-    addMessage(userText, 'user');
+    const hasFiles = uploadedFiles.length > 0;
+    addMessage(userText, 'user', false, hasFiles);
     
-    // Initialize AI processor
     const aiProcessor = new AIProcessor();
     
-    // Only capture image if camera is enabled AND the user's message suggests they want vision
     let imageData = null;
     const needsVision = /\b(see|look|what|how|describe|color|wearing|holding|picture|image|show|visible|appearance|behind|front|left|right|above|below|around|gesture|posture|expression|face|hand|object|room|background|doing|reading|watching|identify|recognize|analyze|observe)\b/i.test(userText);
     
@@ -70,15 +89,12 @@ const Index = () => {
       console.log('Capturing image for vision request');
       imageData = webcamRef.current.captureImage();
       setCurrentImage(imageData);
-    } else {
-      console.log('Skipping image capture - not needed for this request');
     }
 
-    // Process with AI
-    const response = await aiProcessor.processMessage(userText, imageData);
+    const response = await aiProcessor.processMessage(userText, imageData, uploadedFiles);
     
-    addMessage(response, 'assistant', !!imageData);
-  }, [addMessage, cameraEnabled]);
+    addMessage(response, 'assistant', !!imageData, hasFiles);
+  }, [addMessage, cameraEnabled, uploadedFiles]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white overflow-hidden">
@@ -100,19 +116,19 @@ const Index = () => {
               by <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent font-extrabold">SHAM</span>
             </p>
             <p className="text-xs md:text-sm text-gray-300 leading-tight">
-              Advanced AI Assistant with Voice & Vision Capabilities
+              Advanced AI Assistant with Voice, Vision & File Analysis
             </p>
           </div>
         </div>
 
-        {/* Main content area - Flexible with proper spacing */}
+        {/* Main content area */}
         <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 px-3 md:px-4 pb-3 md:pb-4 min-h-0 overflow-hidden">
           {/* Webcam Panel */}
           <div className="lg:col-span-1 order-2 lg:order-1 h-48 sm:h-56 md:h-64 lg:h-auto">
             <Card className="h-full bg-gray-900/50 border-gray-700 backdrop-blur-sm overflow-hidden">
               <div className="p-3 md:p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                  <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Vision Input</h3>
+                  <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Vision & Files</h3>
                   <Button
                     variant="outline"
                     size="sm"
@@ -122,12 +138,23 @@ const Index = () => {
                     {cameraEnabled ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
                   </Button>
                 </div>
-                <div className="flex-1 min-h-0">
-                  <WebcamCapture 
-                    ref={webcamRef}
-                    enabled={cameraEnabled}
-                    onImageCapture={setCurrentImage}
-                  />
+                
+                <div className="flex-1 min-h-0 space-y-3">
+                  <div className="flex-1 min-h-0">
+                    <WebcamCapture 
+                      ref={webcamRef}
+                      enabled={cameraEnabled}
+                      onImageCapture={setCurrentImage}
+                    />
+                  </div>
+                  
+                  <div className="flex-shrink-0">
+                    <FileUpload
+                      onFileUploaded={handleFileUploaded}
+                      uploadedFiles={uploadedFiles}
+                      onRemoveFile={handleRemoveFile}
+                    />
+                  </div>
                 </div>
               </div>
             </Card>
@@ -157,7 +184,7 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Status Indicators - Fixed position with safe area */}
+        {/* Status Indicators */}
         <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-20">
           {isListening && (
             <div className="bg-red-500/20 border border-red-500 rounded-lg px-3 py-2 backdrop-blur-sm">

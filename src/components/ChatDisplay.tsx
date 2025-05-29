@@ -8,6 +8,7 @@ interface Message {
   type: 'user' | 'assistant';
   timestamp: number;
   hasImage?: boolean;
+  hasFiles?: boolean;
 }
 
 interface ChatDisplayProps {
@@ -55,11 +56,16 @@ const ChatDisplay: React.FC<ChatDisplayProps> = ({ messages }) => {
                 <div className="flex-1">
                   <p className="text-sm leading-relaxed">{message.text}</p>
                   
-                  <div className="flex items-center gap-2 mt-2 text-xs opacity-70">
+                  <div className="flex items-center gap-2 mt-2 text-xs opacity-70 flex-wrap">
                     <span>{formatTime(message.timestamp)}</span>
                     {message.hasImage && (
                       <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded">
                         📷 Vision used
+                      </span>
+                    )}
+                    {message.hasFiles && (
+                      <span className="bg-orange-500/20 text-orange-300 px-2 py-1 rounded">
+                        📎 Files attached
                       </span>
                     )}
                   </div>

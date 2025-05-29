@@ -1,4 +1,3 @@
-
 class AIProcessor {
   private apiKey: string;
   private baseUrl: string;
@@ -21,17 +20,26 @@ class AIProcessor {
     return visionKeywords.some(keyword => lowerText.includes(keyword));
   }
 
-  async processMessage(userMessage: string, imageData?: string | null): Promise<string> {
+  async processMessage(userMessage: string, imageData?: string | null, uploadedFiles?: any[]): Promise<string> {
     try {
       console.log('Processing message:', userMessage);
       console.log('Image data available:', !!imageData);
+      console.log('Uploaded files:', uploadedFiles?.length || 0);
       console.log('Needs vision:', this.needsVision(userMessage));
       
       const useVision = this.needsVision(userMessage) && imageData;
+      const hasUploadedImages = uploadedFiles?.some(f => f.type === 'image');
       
       if (useVision && imageData) {
-        console.log('Using vision API');
-        return await this.processWithVision(userMessage, imageData);
+        console.log('Using vision API with camera');
+        return await this.processWithVision(userMessage, imageData, uploadedFiles);
+      } else if (hasUploadedImages && this.needsVision(userMessage)) {
+        console.log('Using vision API with uploaded image');
+        const imageFile = uploadedFiles?.find(f => f.type === 'image');
+        return await this.processWithVision(userMessage, imageFile?.url, uploadedFiles);
+      } else if (uploadedFiles && uploadedFiles.length > 0) {
+        console.log('Using text-only API with file context');
+        return await this.processWithFiles(userMessage, uploadedFiles);
       } else {
         console.log('Using text-only API');
         return await this.processTextOnly(userMessage);
@@ -40,6 +48,48 @@ class AIProcessor {
       console.error('AI processing error:', error);
       return "I apologize, but I'm having trouble processing your request right now. Please try again in a moment.";
     }
+  }
+
+  private async processWithFiles(text: string, files: any[]): Promise<string> {
+    const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
+    
+    let fileContext = "You have access to the following uploaded files:\n";
+    files.forEach(file => {
+      fileContext += `- ${file.file.name} (${file.type.toUpperCase()})\n`;
+      if (file.content) {
+        fileContext += `  Content preview: ${file.content}\n`;
+      }
+    });
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `You are NEXUS AI by Sham, an advanced AI assistant. ${fileContext}\nUser message: ${text}`
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't process the files.";
+    
+    this.speakText(aiResponse);
+    return aiResponse;
   }
 
   private async processTextOnly(text: string): Promise<string> {
@@ -80,19 +130,43 @@ class AIProcessor {
     
     const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
     
-    // Speak the response
     this.speakText(aiResponse);
-    
     return aiResponse;
   }
 
-  private async processWithVision(text: string, imageData: string): Promise<string> {
+  private async processWithVision(text: string, imageData: string, uploadedFiles?: any[]): Promise<string> {
     const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
     
     console.log('Making vision API request to:', url);
     
-    // Convert base64 image to the format Gemini expects
-    const base64Data = imageData.split(',')[1];
+    let base64Data;
+    if (imageData.startsWith('blob:')) {
+      // Handle uploaded file blob URL
+      const response = await fetch(imageData);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      base64Data = await new Promise((resolve) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.readAsDataURL(blob);
+      });
+    } else {
+      // Handle camera base64 data
+      base64Data = imageData.split(',')[1];
+    }
+    
+    let contextText = `You are NEXUS AI by Sham, an advanced AI assistant with vision capabilities. You can see through the user's camera or analyze uploaded images.`;
+    
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      contextText += " The user has also uploaded files: ";
+      uploadedFiles.forEach(file => {
+        contextText += `${file.file.name} (${file.type}), `;
+      });
+    }
+    
+    contextText += ` Analyze the image and respond to: ${text}`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -103,7 +177,7 @@ class AIProcessor {
         contents: [{
           parts: [
             {
-              text: `You are NEXUS AI by Sham, an advanced AI assistant with vision capabilities. You can see through the user's camera. Be helpful and observant. Analyze the image and respond to: ${text}`
+              text: contextText
             },
             {
               inline_data: {
@@ -135,15 +209,12 @@ class AIProcessor {
     
     const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't analyze the image.";
     
-    // Speak the response
     this.speakText(aiResponse);
-    
     return aiResponse;
   }
 
   private speakText(text: string): void {
     if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
       speechSynthesis.cancel();
       
       const utterance = new SpeechSynthesisUtterance(text);
@@ -151,7 +222,6 @@ class AIProcessor {
       utterance.pitch = 1.1;
       utterance.volume = 0.8;
       
-      // Try to use a more natural voice if available
       const voices = speechSynthesis.getVoices();
       const preferredVoice = voices.find(voice => 
         voice.name.includes('Google') || 
