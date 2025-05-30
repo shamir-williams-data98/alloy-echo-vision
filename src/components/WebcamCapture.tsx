@@ -90,22 +90,34 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     return <CameraDisabled />;
   }
 
-  if (error || permissionGranted === false) {
+  // Show error state for permission denied or other errors
+  if (error && permissionGranted === false) {
     return (
       <CameraError 
-        error={error || 'Camera permission required'} 
+        error={error} 
         onRetry={() => window.location.reload()}
         onRequestPermission={requestPermission}
       />
     );
   }
 
-  if (isLoading || (permissionGranted === true && !videoReady)) {
+  // Show error for other types of errors
+  if (error && !isLoading) {
+    return (
+      <CameraError 
+        error={error} 
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
+
+  // Show loading state
+  if (isLoading || (!stream && permissionGranted !== false)) {
     return <CameraLoading />;
   }
 
-  if (permissionGranted === null) {
-    // Show permission request UI
+  // Show permission request UI only when we know permission is needed
+  if (permissionGranted === false && !error) {
     return (
       <div className="w-full h-full bg-gray-800 rounded-lg flex items-center justify-center p-4">
         <div className="text-center text-gray-300">

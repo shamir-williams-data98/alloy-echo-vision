@@ -25,31 +25,6 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
     setIsLoading(false);
   }, []);
 
-  const checkPermission = useCallback(async () => {
-    try {
-      const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
-      console.log('Camera permission state:', result.state);
-      
-      if (result.state === 'granted') {
-        setPermissionGranted(true);
-        setError('');
-        return true;
-      } else if (result.state === 'denied') {
-        setPermissionGranted(false);
-        setError('Camera permission denied. Please allow camera access in your browser settings.');
-        setIsLoading(false);
-        return false;
-      } else {
-        // Permission state is 'prompt'
-        setPermissionGranted(null);
-        return null;
-      }
-    } catch (err) {
-      console.log('Permission API not supported, will try direct access');
-      return null;
-    }
-  }, []);
-
   const requestPermission = useCallback(async () => {
     try {
       setError('');
@@ -93,6 +68,7 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
     // If permission is explicitly denied, don't try to start
     if (permissionGranted === false) {
       setError('Camera permission denied. Please allow camera access.');
+      setIsLoading(false);
       return;
     }
 
@@ -132,7 +108,7 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
           setPermissionGranted(false);
-          setError('Camera access denied. Please click "Allow Camera" below.');
+          setError('Camera access denied. Please allow camera access below.');
         } else if (err.name === 'NotFoundError') {
           setError('No camera found on this device.');
         } else {
@@ -142,19 +118,23 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
     }
   }, [enabled, facingMode, permissionGranted]);
 
-  // Check permission when hook initializes
+  // Initialize camera when enabled
   useEffect(() => {
-    if (enabled) {
-      checkPermission().then(permissionState => {
-        if (permissionState === true) {
-          // Permission already granted, start camera
-          startCamera();
-        } else if (permissionState === false) {
-          // Permission denied, show error
-          setError('Camera permission denied. Please allow camera access.');
-        }
-        // If permissionState is null, we'll wait for user to request permission
-      });
+    if (!enabled) {
+      stopCamera();
+      setPermissionGranted(null);
+      return;
+    }
+
+    // Check if we already know the permission state
+    if (permissionGranted === true) {
+      startCamera();
+    } else if (permissionGranted === false) {
+      setError('Camera permission denied. Please allow camera access.');
+      setIsLoading(false);
+    } else {
+      // Permission state unknown, try to start camera directly
+      startCamera();
     }
   }, [enabled]);
 
