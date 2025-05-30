@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import { useCamera } from '@/hooks/useCamera';
 import CameraControls from '@/components/CameraControls';
@@ -9,12 +8,20 @@ import CameraDisabled from '@/components/CameraDisabled';
 
 interface WebcamCaptureProps {
   enabled: boolean;
+  continuousCapture?: boolean;
   onImageCapture?: (imageData: string) => void;
+  onFrameCapture?: (imageData: string) => void;
 }
 
-const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCapture }, ref) => {
+const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ 
+  enabled, 
+  continuousCapture = false,
+  onImageCapture, 
+  onFrameCapture 
+}, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [videoReady, setVideoReady] = useState(false);
   
@@ -30,29 +37,65 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     facingMode
   });
 
+  const captureImageData = () => {
+    if (!videoRef.current || !canvasRef.current || !isReady || !videoReady) {
+      console.log('Video not ready for capture');
+      return null;
+    }
+    
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext('2d');
+    
+    if (!context) return null;
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0);
+    
+    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    return imageData;
+  };
+
   useImperativeHandle(ref, () => ({
     captureImage: () => {
-      if (!videoRef.current || !canvasRef.current || !isReady || !videoReady) {
-        console.log('Video not ready for capture');
-        return null;
+      const imageData = captureImageData();
+      if (imageData) {
+        console.log('Manual image captured successfully');
+        onImageCapture?.(imageData);
       }
-      
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      const context = canvas.getContext('2d');
-      
-      if (!context) return null;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0);
-      
-      const imageData = canvas.toDataURL('image/jpeg', 0.8);
-      console.log('Image captured successfully');
-      onImageCapture?.(imageData);
       return imageData;
     }
   }));
+
+  // Continuous frame capture effect
+  useEffect(() => {
+    if (continuousCapture && isReady && videoReady && enabled) {
+      console.log('Starting continuous frame capture at 2-second intervals');
+      
+      intervalRef.current = setInterval(() => {
+        const frameData = captureImageData();
+        if (frameData) {
+          console.log('Frame captured for gesture analysis');
+          onFrameCapture?.(frameData);
+        }
+      }, 2000);
+
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+          console.log('Stopped continuous frame capture');
+        }
+      };
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        console.log('Continuous frame capture disabled');
+      }
+    }
+  }, [continuousCapture, isReady, videoReady, enabled, onFrameCapture]);
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -90,7 +133,6 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     return <CameraDisabled />;
   }
 
-  // Show error state for permission denied or other errors
   if (error && permissionGranted === false) {
     return (
       <CameraError 
@@ -101,7 +143,6 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     );
   }
 
-  // Show error for other types of errors
   if (error && !isLoading) {
     return (
       <CameraError 
@@ -111,12 +152,10 @@ const WebcamCapture = forwardRef<any, WebcamCaptureProps>(({ enabled, onImageCap
     );
   }
 
-  // Show loading state
   if (isLoading || (!stream && permissionGranted !== false)) {
     return <CameraLoading />;
   }
 
-  // Show permission request UI only when we know permission is needed
   if (permissionGranted === false && !error) {
     return (
       <div className="w-full h-full bg-gray-800 rounded-lg flex items-center justify-center p-4">

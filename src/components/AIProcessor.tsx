@@ -20,6 +20,77 @@ class AIProcessor {
     return visionKeywords.some(keyword => lowerText.includes(keyword));
   }
 
+  async processLiveFrame(imageData: string): Promise<void> {
+    try {
+      console.log('Processing live frame for gesture analysis');
+      
+      const url = `${this.baseUrl}/gemini-1.5-flash:generateContent?key=${this.apiKey}`;
+      
+      let base64Data;
+      if (imageData.startsWith('blob:')) {
+        const response = await fetch(imageData);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        base64Data = await new Promise((resolve) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        base64Data = imageData.split(',')[1];
+      }
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                text: "Analyze this live camera frame and describe any gestures, hand movements, or body language you observe. Be very brief (1-2 sentences max). If no clear gestures are visible, just say 'No clear gestures detected'."
+              },
+              {
+                inline_data: {
+                  mime_type: 'image/jpeg',
+                  data: base64Data
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            topK: 20,
+            topP: 0.8,
+            maxOutputTokens: 100,
+          }
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Live frame analysis failed:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const gestureDescription = data.candidates?.[0]?.content?.parts?.[0]?.text || "No gesture analysis available";
+      
+      console.log('Gesture analysis result:', gestureDescription);
+      
+      // Only speak if there's a meaningful gesture detected
+      if (!gestureDescription.toLowerCase().includes('no clear gestures') && 
+          !gestureDescription.toLowerCase().includes('no gestures')) {
+        this.speakText(gestureDescription);
+      }
+      
+    } catch (error) {
+      console.error('Live frame processing error:', error);
+    }
+  }
+
   async processMessage(userMessage: string, imageData?: string | null, uploadedFiles?: any[]): Promise<string> {
     try {
       console.log('Processing message:', userMessage);

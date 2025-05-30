@@ -1,8 +1,8 @@
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Mic, MicOff, Camera, CameraOff, Volume2, VolumeX } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, Hand } from 'lucide-react';
 import WebcamCapture from '@/components/WebcamCapture';
 import VoiceControls from '@/components/VoiceControls';
 import ChatDisplay from '@/components/ChatDisplay';
@@ -39,6 +39,7 @@ const Index = () => {
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [gestureMode, setGestureMode] = useState(false);
   const webcamRef = useRef<any>(null);
 
   useEffect(() => {
@@ -73,6 +74,13 @@ const Index = () => {
   const handleRemoveFile = useCallback((id: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== id));
   }, []);
+
+  const handleFrameCapture = useCallback(async (frameData: string) => {
+    if (!gestureMode) return;
+    
+    const aiProcessor = new AIProcessor();
+    await aiProcessor.processLiveFrame(frameData);
+  }, [gestureMode]);
 
   const handleUserMessage = useCallback(async (userText: string) => {
     console.log('User message received:', userText);
@@ -128,21 +136,34 @@ const Index = () => {
               <div className="p-3 md:p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-3 flex-shrink-0">
                   <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Vision</h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCameraEnabled(!cameraEnabled)}
-                    className="border-gray-600 text-gray-300 hover:bg-gray-700 text-xs md:text-sm"
-                  >
-                    {cameraEnabled ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <Hand className="w-4 h-4 text-purple-400" />
+                      <Switch
+                        checked={gestureMode}
+                        onCheckedChange={setGestureMode}
+                        className="data-[state=checked]:bg-purple-600"
+                      />
+                      <span className="text-xs text-gray-300">Gesture</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCameraEnabled(!cameraEnabled)}
+                      className="border-gray-600 text-gray-300 hover:bg-gray-700 text-xs md:text-sm"
+                    >
+                      {cameraEnabled ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="flex-1 min-h-0">
                   <WebcamCapture 
                     ref={webcamRef}
                     enabled={cameraEnabled}
+                    continuousCapture={gestureMode}
                     onImageCapture={setCurrentImage}
+                    onFrameCapture={handleFrameCapture}
                   />
                 </div>
               </div>
@@ -192,6 +213,15 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 <Volume2 className="w-4 h-4 text-blue-400 animate-pulse" />
                 <span className="text-xs text-blue-300">Speaking...</span>
+              </div>
+            </div>
+          )}
+
+          {gestureMode && cameraEnabled && (
+            <div className="bg-purple-500/20 border border-purple-500 rounded-lg px-3 py-2 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <Hand className="w-4 h-4 text-purple-400 animate-pulse" />
+                <span className="text-xs text-purple-300">Gesture Mode</span>
               </div>
             </div>
           )}
