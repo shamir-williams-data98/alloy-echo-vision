@@ -120,10 +120,10 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Main content area */}
-        <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 gap-3 md:gap-4 px-3 md:px-4 pb-3 md:pb-4 min-h-0 overflow-hidden">
-          {/* Webcam Panel */}
-          <div className="lg:col-span-1 order-2 lg:order-1 h-48 sm:h-56 md:h-64 lg:h-auto">
+        {/* Main content area - Updated for better mobile layout */}
+        <div className="flex-1 flex flex-col gap-3 md:gap-4 px-3 md:px-4 pb-3 md:pb-4 min-h-0 overflow-hidden">
+          {/* Webcam Panel - Improved mobile height */}
+          <div className="h-64 sm:h-72 md:h-80 lg:h-1/2">
             <Card className="h-full bg-gray-900/50 border-gray-700 backdrop-blur-sm overflow-hidden">
               <div className="p-3 md:p-4 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-3 flex-shrink-0">
@@ -150,7 +150,7 @@ const Index = () => {
           </div>
 
           {/* Chat Panel */}
-          <div className="lg:col-span-2 order-1 lg:order-2 flex-1 flex flex-col min-h-0">
+          <div className="flex-1 min-h-0">
             <Card className="h-full bg-gray-900/50 border-gray-700 backdrop-blur-sm flex flex-col min-h-0 overflow-hidden">
               <div className="p-3 md:p-4 border-b border-gray-700 flex-shrink-0">
                 <h3 className="text-sm md:text-lg font-semibold text-cyan-400">Conversation</h3>
