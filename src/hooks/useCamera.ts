@@ -25,50 +25,9 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
     setIsLoading(false);
   }, []);
 
-  const requestPermission = useCallback(async () => {
-    try {
-      setError('');
-      setIsLoading(true);
-      console.log('Requesting camera permission...');
-      
-      const tempStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' } 
-      });
-      
-      // Permission granted, clean up temp stream
-      tempStream.getTracks().forEach(track => track.stop());
-      setPermissionGranted(true);
-      console.log('Permission granted');
-      
-      // Now start the actual camera
-      await startCamera();
-    } catch (err) {
-      console.error('Permission request failed:', err);
-      setPermissionGranted(false);
-      setIsLoading(false);
-      
-      if (err instanceof Error) {
-        if (err.name === 'NotAllowedError') {
-          setError('Camera access denied. Please click the camera icon in your browser\'s address bar to allow access.');
-        } else if (err.name === 'NotFoundError') {
-          setError('No camera found on this device.');
-        } else {
-          setError('Unable to access camera. Please try again.');
-        }
-      }
-    }
-  }, []);
-
   const startCamera = useCallback(async () => {
     if (!enabled) {
       stopCamera();
-      return;
-    }
-
-    // If permission is explicitly denied, don't try to start
-    if (permissionGranted === false) {
-      setError('Camera permission denied. Please allow camera access.');
-      setIsLoading(false);
       return;
     }
 
@@ -108,42 +67,34 @@ export const useCamera = ({ enabled, facingMode }: UseCameraProps) => {
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError') {
           setPermissionGranted(false);
-          setError('Camera access denied. Please allow camera access below.');
+          setError('Camera access denied. Please allow camera access.');
         } else if (err.name === 'NotFoundError') {
           setError('No camera found on this device.');
+        } else if (err.name === 'NotReadableError') {
+          setError('Camera is already in use by another application.');
         } else {
           setError(`Camera error: ${err.message}`);
         }
       }
     }
-  }, [enabled, facingMode, permissionGranted]);
+  }, [enabled, facingMode, stopCamera]);
 
-  // Initialize camera when enabled
+  const requestPermission = useCallback(() => {
+    console.log('Requesting camera permission by attempting to start camera...');
+    startCamera();
+  }, [startCamera]);
+
+  // Initialize camera when enabled or facingMode changes
   useEffect(() => {
     if (!enabled) {
       stopCamera();
       setPermissionGranted(null);
+      setError('');
       return;
     }
 
-    // Check if we already know the permission state
-    if (permissionGranted === true) {
-      startCamera();
-    } else if (permissionGranted === false) {
-      setError('Camera permission denied. Please allow camera access.');
-      setIsLoading(false);
-    } else {
-      // Permission state unknown, try to start camera directly
-      startCamera();
-    }
-  }, [enabled]);
-
-  // Handle facingMode changes
-  useEffect(() => {
-    if (enabled && permissionGranted === true && !isLoading) {
-      startCamera();
-    }
-  }, [facingMode]);
+    startCamera();
+  }, [enabled, facingMode, startCamera]);
 
   return {
     stream,
